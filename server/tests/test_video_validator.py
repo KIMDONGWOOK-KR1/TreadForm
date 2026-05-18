@@ -18,7 +18,7 @@ from video_validator import (
     validate,
 )
 
-REAL_VIDEO = Path(__file__).resolve().parents[1] / "running_video.mp4"
+REAL_VIDEO = Path(__file__).resolve().parents[1] / "pace530.mp4"
 
 
 def _meta(
@@ -134,7 +134,7 @@ class TestException:
         assert "FPS_TOO_LOW" in str(exc)
 
 
-@pytest.mark.skipif(not REAL_VIDEO.exists(), reason="running_video.mp4 not present")
+@pytest.mark.skipif(not REAL_VIDEO.exists(), reason="pace530.mp4 not present")
 class TestRealVideo:
     def test_real_running_video_passes(self):
         r = validate(str(REAL_VIDEO))

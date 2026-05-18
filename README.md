@@ -28,7 +28,7 @@ handoff_prd1-3/
     ├── pytest.ini                       pytest 설정
     ├── run_analysis.py                  CLI 진입점 (단독 실행 스크립트)
     ├── video_validator.py               PRD-8 하드 요건 검증 (해상도/fps/길이)
-    ├── running_video.mp4                테스트용 샘플 영상 (≈7MB)
+    ├── pace530.mp4                      테스트용 샘플 영상 (≈8MB, 5:30 pace)
     │
     ├── analyzer/                        ★ 분석 파이프라인 본체
     │   ├── __init__.py                  run_full_analysis / run_full_analysis_with_output
@@ -86,7 +86,7 @@ handoff_prd1-3/
 | `docs/PRD-4 ~ PRD-7` | API/앱/통합 단계 명세 |
 | `docs/INTEGRATION_TEST_CHECKLIST.md` | PRD-7 통합 환경용 체크리스트 |
 | `server/tests/test_api.py` | PRD-4 API 라우터 테스트 |
-| `server/dongwook*.mp4`, `pace*.mp4`, `debug_overlay*.mp4` | 디버깅용 영상. `running_video.mp4` 하나로 모든 테스트 통과 |
+| `server/dongwook*.mp4`, `pace6/630/7.mp4`, `debug_overlay*.mp4` | 추가 페이스 샘플·디버깅용 영상. `pace530.mp4` 하나로 모든 테스트 통과 |
 | `server/analyze_spikes.py`, `debug_overlay.py` | 일회성 디버깅 스크립트 |
 | `server/analysis_result.json`, `uvicorn.*.log`, `uploads_baseline.txt` | 런타임 캐시/로그 |
 
@@ -102,12 +102,12 @@ python -m venv venv
 pip install -r requirements.txt
 
 # 2) CLI 단독 실행 (storage/ 없이 핵심 분석만)
-python run_analysis.py running_video.mp4
+python run_analysis.py pace530.mp4
 #   → 콘솔에 요약 출력, analysis_result.json 저장
 
 # 3) 산출물까지 한 번에 (PRD-3 전체)
 python -c "from analyzer import run_full_analysis_with_output; \
-           print(run_full_analysis_with_output('running_video.mp4', './out'))"
+           print(run_full_analysis_with_output('pace530.mp4', './out'))"
 #   → ./out/renders/<id>.mp4 (스켈레톤 영상)
 #   → ./out/reports/<id>.csv  (프레임별 CSV)
 #   → 반환 dict 안에 coach_message(한국어 문장) 포함
