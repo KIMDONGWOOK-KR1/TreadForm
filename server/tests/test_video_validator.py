@@ -25,7 +25,7 @@ def _meta(
     *,
     width: int = 1280,
     height: int = 720,
-    fps: float = 30.0,
+    fps: float = 60.0,
     duration_sec: float = 10.0,
     frame_count: int = 300,
 ) -> VideoMeta:
@@ -114,7 +114,7 @@ class TestBoundaryValues:
         assert validate("dummy.mp4").ok is True
 
     def test_exact_min_fps_passes(self, monkeypatch):
-        _patch_probe(monkeypatch, _meta(fps=30.0))
+        _patch_probe(monkeypatch, _meta(fps=60.0))
         assert validate("dummy.mp4").ok is True
 
     def test_exact_min_duration_passes(self, monkeypatch):
@@ -140,4 +140,4 @@ class TestRealVideo:
         r = validate(str(REAL_VIDEO))
         assert r.ok is True, f"Expected pass but got: {r.reason_code} {r.reason_message_ko}"
         assert r.meta.width >= 1280
-        assert r.meta.fps >= 30
+        assert r.meta.fps >= 60

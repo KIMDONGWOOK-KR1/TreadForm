@@ -51,8 +51,8 @@ def reject_samples() -> dict[str, Path]:
         "portrait": _write_video(SAMPLE_DIR / "portrait_720x1280.mp4", 720, 1280, 30, 8),
         "low_res":  _write_video(SAMPLE_DIR / "low_res_640x480.mp4",   640, 480, 30, 8),
         "low_fps":  _write_video(SAMPLE_DIR / "low_fps_24fps.mp4",     1280, 720, 24, 8),
-        "short":    _write_video(SAMPLE_DIR / "duration_3s.mp4",       1280, 720, 30, 3),
-        "long":     _write_video(SAMPLE_DIR / "duration_65s.mp4",      1280, 720, 30, 65),
+        "short":    _write_video(SAMPLE_DIR / "duration_3s.mp4",       1280, 720, 60, 3),
+        "long":     _write_video(SAMPLE_DIR / "duration_65s.mp4",      1280, 720, 60, 65),
     }
     # corrupt: 헤더 손상 mp4 (텍스트로 채움).
     corrupt = SAMPLE_DIR / "corrupt.mp4"
