@@ -200,7 +200,7 @@ ASYMMETRY_FOOT_VIS_DIFF_THRESHOLD = 0.10
 #       §V3 (길이, Zifchock 통계 안정성 + BENCHMARK.md elapsed).
 MIN_VIDEO_WIDTH = 1280
 MIN_VIDEO_HEIGHT = 720
-MIN_VIDEO_FPS = 30
+MIN_VIDEO_FPS = 60
 MIN_VIDEO_DURATION_SEC = 5
 MAX_VIDEO_DURATION_SEC = 60
 # 분석 가능 프레임 비율 하한 (사람이 검출된 프레임 / 전체 프레임).
