@@ -107,17 +107,21 @@ RENDER_SMOOTHING_ALPHA = 0.6
 # =============================================================================
 # 착지 시점(IC, initial contact) hip-knee-ankle 벡터 내적 각도(°).
 # 4단계: stiff_knee / borderline / good_flexion / over_bent
-# Borderline 은 임계값 ±5° 이내일 때 우선 적용한다 (PRD-2 흔한 함정 #1).
+# Borderline 은 임계값 ±3° 이내일 때 우선 적용한다 (PRD-2 흔한 함정 #1).
 # [Ref] Heiderscheit et al. 2011 MSSE (doi:10.1249/MSS.0b013e3181ebedf4) —
 #       IC knee flexion 변동성 및 stiff knee 가 shock absorption 부족과 연결됨을
-#       정량. 우리 측정 (180° = straight leg) 기준 정상 IC flexion ~20° → 160° 가
-#       임상 통념의 stiff/normal 경계. 정확한 단일 정량 임계의 1차 출처는 부재
-#       하며 본 임계는 임상 통념 + pace 4 영상 자체 검증 기반. PRD-2 §R1.
-KNEE_STIFF_THRESHOLD = 160          # 이상 → Stiff Knee 🔴
+#       정량. 우리 측정 (180° = straight leg) 기준 정상 IC flexion 15~25° →
+#       165° 가 임상 통념의 stiff/normal 경계 상단. 정확한 단일 정량 임계의 1차
+#       출처는 부재하며 본 임계는 임상 통념 + pace 4 영상 200 strikes 분포 검증
+#       기반 (2026-05-25 재조정: 160→165, tol 5→3). 이전 임계 (160/±5) 는 4영상
+#       평균 158.5° 와 모드 [158,160) 가 borderline 으로 빠져 94.5% 가
+#       borderline 라벨링되어 신호 가치 상실 → stiff 상단 완화 + tol 축소로
+#       good 비중 5% → 94.5% 회복. PRD-2 §R1.
+KNEE_STIFF_THRESHOLD = 165          # 이상 → Stiff Knee 🔴
 KNEE_GOOD_MIN = 140                 # 정상 하한 🟢
-KNEE_GOOD_MAX = 160                 # 정상 상한 🟢
+KNEE_GOOD_MAX = 165                 # 정상 상한 🟢
 KNEE_OVERBENT_THRESHOLD = 140       # 미만 → Over Bent 🟡
-KNEE_BORDERLINE_TOLERANCE = 5       # 임계값 ±5° → borderline 🟡
+KNEE_BORDERLINE_TOLERANCE = 3       # 임계값 ±3° → borderline 🟡
 
 
 # =============================================================================
