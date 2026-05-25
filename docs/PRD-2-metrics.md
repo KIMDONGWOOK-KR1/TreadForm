@@ -394,13 +394,58 @@ result.summary                                 # 요약 출력용
 
 각 임계값은 러닝 바이오메카닉스 문헌의 1차 출처에 기반한다. 우리 측정/구현 방식은 측면 트레드밀 영상 기반의 2D 정규화 좌표라는 환경 제약을 반영해 일부 임계는 자체 보정을 거쳤다 — 그 경우에도 출처의 일반 원리를 따른다.
 
-### [R1] 무릎 굴곡 (160° stiff / 140° over_bent / ±5° borderline)
+### [R1] 무릎 굴곡 (165° stiff / 140° over_bent / ±3° borderline, 2026-05-25 재조정)
 
-우리 측정 시점은 **착지 시점 (IC, initial contact)** — 발목 Y 가 가장 아래로 내려간 프레임 (foot_strike_detector 가 식별). 측정 방식은 hip-knee-ankle 의 내각(°) (180° = straight leg, 90° = right angle). 즉 임계 160°는 **IC flexion ≈ 20° (stiff knee 경계)**, 140°는 **flexion ≈ 40° (과굴곡 경계)** 에 해당한다.
+우리 측정 시점은 **착지 시점 (IC, initial contact)** — 발목 Y 가 가장 아래로 내려간 프레임 (foot_strike_detector 가 식별). 측정 방식은 hip-knee-ankle 의 내각(°) (180° = straight leg, 90° = right angle). 즉 임계 165°는 **IC flexion ≈ 15° (stiff knee 경계)**, 140°는 **flexion ≈ 40° (과굴곡 경계)** 에 해당한다.
 
-- **Heiderscheit BC, Chumanov ES, Michalski MP, Wille CMA, Ryan MB.** Effects of step rate manipulation on joint mechanics during running. *Med Sci Sports Exerc.* 2011;43(2):296-302. doi:[10.1249/MSS.0b013e3181ebedf4](https://doi.org/10.1249/MSS.0b013e3181ebedf4) — peak knee flexion 이 cadence 와 강하게 연관, stiff knee 패턴이 부상 위험과 연결됨을 정량. IC flexion 변동성도 함께 다룸.
+- **Heiderscheit BC, Chumanov ES, Michalski MP, Wille CMA, Ryan MB.** Effects of step rate manipulation on joint mechanics during running. *Med Sci Sports Exerc.* 2011;43(2):296-302. doi:[10.1249/MSS.0b013e3181ebedf4](https://doi.org/10.1249/MSS.0b013e3181ebedf4) — n=45 healthy recreational runner 의 preferred condition IC knee flexion baseline = **17.8° ± 4.0°** (논문 본문 보고). stiff knee 패턴이 shock absorption 부족과 부상 위험에 연결됨을 정량.
 
-**자체 결정 명시:** 정확한 단일 정량 임계 (160°/140°) 를 IC 시점에 명시한 1차 학술 출처는 부재하다. 본 임계는 **임상 통념 (IC normal flexion ~20°)** 에 기반하며, pace 530/6/7/630 4 영상에서 보수성 자체 검증 (false positive 0건) 으로 보강했다. 발표 시 "임상 통념 기반 + 자체 검증" 으로 정직 표기 필요.
+**임계의 통계적 근거 (SD 단위 매핑):** Heiderscheit baseline (17.8° ± 4.0°) ↔ 우리 컨벤션:
+
+| 우리 knee angle | = IC flexion | baseline 기준 위치 |
+|---|---|---|
+| 162.2° | 17.8° | mean (baseline) |
+| **165°** (stiff 임계) | **15°** | **mean − 0.7 SD** (stiff 방향 outlier 경계) |
+| 158.5° (자체 평균) | 21.5° | mean + 0.9 SD (숙련 러너 측 더 굽힘) |
+| 140° (over_bent) | 40° | mean + 5.6 SD (매우 보수적 하한) |
+
+**자체 데이터 검증:** pace 530/6/7/630 4 영상 200 strikes 평균 158.5° / max 164° / > 165° 0건 / < 140° 0건. False positive 0건. 2026-05-25 재조정 이전 임계 (160°/±5°) 는 분포 모드 [158,160) 정점을 가로질러 94.5% borderline 으로 빠지며 신호 가치 상실 → 165°/±3° 로 완화 후 good 비중 5% → 94.5% 회복.
+
+### [R1-future] Peak Flexion 측정 (향후 작업)
+
+**현재 미구현. Souza 2016 인용을 위한 deferred 작업.**
+
+#### 동기
+
+현재 [R1] 은 IC 시점만 평가하나, 충격 흡수 능력 전체를 평가하려면 **mid-stance peak flexion (입각기 최대 굴곡)** 측정이 표준이다. 같은 IC angle 이더라도 peak 까지 도달하는 굴곡량이 다르면 shock absorption 결과가 다르다 — 즉 IC 와 peak 는 보완 지표.
+
+#### 학술 근거 (deferred citation)
+
+- **Souza RB.** An evidence-based videotaped running biomechanics analysis. *Phys Med Rehabil Clin N Am.* 2016;27(1):217-236. PMC: [PMC4714754](https://pmc.ncbi.nlm.nih.gov/articles/PMC4714754/) — 2D 비디오 running gait analysis 의 표준 프로토콜. **stance phase peak flexion < 45° = stiff** (shock absorption 부족) 권장. 본 지표 구현 시 1차 근거.
+
+#### 구현 의사 코드
+
+```
+1. 기존 detect_left_right_strikes() → IC frame 인덱스 확보
+2. (신규) detect_toe_off(ankle_y_series, ic_frames) → 각 IC 다음
+   ankle_y 가 다시 올라가기 시작하는 frame (find_peaks 응용, 반전된 신호)
+3. 각 strike 의 stance phase = [ic_frame, toe_off_frame]
+4. 그 범위 내 knee_angle 시리즈의 최솟값 = peak_flexion_angle
+5. classify_peak_flexion(angle):
+     PEAK_INSUFFICIENT_THRESHOLD = 145  # = IC flexion 35°, Souza 권장 미달
+     PEAK_GOOD_TARGET = 135             # = IC flexion 45°, Souza 권장
+     return "insufficient_flexion" | "good_peak_flexion" | "borderline"
+```
+
+#### 기술 제약
+
+- **Toe-off 검출**: 현재 구현 없음. ankle_y 의 IC 직후 local minimum 종료 시점 식별 알고리즘 필요.
+- **시간 분해능**: 60fps 에서 peak flexion 시점 위치 정확도 ±2~3° (peak 근처 변화율 ~5~10°/50ms, 1프레임 ~17ms 분해능). 120fps 영상 입력 시 ±1° 로 향상 가능. 현재 [R1] tolerance ±3° 와 동일 수준이라 충분히 흡수 가능.
+- **2D perspective 한계**: peak 시점의 무릎이 sagittal plane 에서 살짝 회전하면 측면 영상에서 각도 측정 오차 증가. Souza 2016 도 같은 한계를 명시.
+
+#### 구현 우선순위
+
+P3 (after 시연 영상 / 사용자 피드백 / 다른 러너 영상 다양화 검증). 단일 측정 (IC) 만으로도 stiff knee 신호 분류 가능하고, peak 추가는 정밀도 향상이지 신호 부재 해소 아님.
 
 ### [R2] Foot Strike Pattern (±3° 임계)
 
