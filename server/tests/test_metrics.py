@@ -141,26 +141,26 @@ class TestKneeFlexion:
         assert math.isnan(calculate_knee_angle(hip, knee, ankle))
 
     def test_knee_at_stiff_threshold_is_borderline(self):
-        # 정확히 160° → ±5° 범위 안 → borderline.
+        # 정확히 stiff 임계값 (165°) → ±tol 범위 안 → borderline.
         assert classify_knee_status(float(KNEE_STIFF_THRESHOLD)) == "borderline"
 
-    def test_knee_at_165_is_stiff(self):
-        # 160 + 5 초과 영역 → stiff.
-        assert classify_knee_status(165.0 + 0.01) == "stiff_knee"
+    def test_knee_above_stiff_border_is_stiff(self):
+        # stiff 임계 + tol 초과 (168° 초과) → stiff.
+        assert classify_knee_status(168.0 + 0.01) == "stiff_knee"
 
     def test_knee_at_150_is_good(self):
         assert classify_knee_status(150.0) == "good_flexion"
 
     def test_knee_at_130_is_over_bent(self):
-        # 140 - 5 미만 영역 → over_bent.
+        # 140 - tol 미만 영역 → over_bent.
         assert classify_knee_status(130.0) == "over_bent"
 
     def test_knee_at_overbent_threshold_is_borderline(self):
         assert classify_knee_status(140.0) == "borderline"
 
     def test_borderline_tolerance_respected(self):
-        # KNEE_BORDERLINE_TOLERANCE 가 5 라는 가정 의존성을 명시.
-        assert KNEE_BORDERLINE_TOLERANCE == 5
+        # KNEE_BORDERLINE_TOLERANCE 가 3 이라는 가정 의존성을 명시 (2026-05-25 재조정).
+        assert KNEE_BORDERLINE_TOLERANCE == 3
 
     def test_analyze_knee_flexion_aggregates(
         self, synthetic_running_df, synthetic_strikes

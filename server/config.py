@@ -107,17 +107,28 @@ RENDER_SMOOTHING_ALPHA = 0.6
 # =============================================================================
 # 착지 시점(IC, initial contact) hip-knee-ankle 벡터 내적 각도(°).
 # 4단계: stiff_knee / borderline / good_flexion / over_bent
-# Borderline 은 임계값 ±5° 이내일 때 우선 적용한다 (PRD-2 흔한 함정 #1).
+# Borderline 은 임계값 ±3° 이내일 때 우선 적용한다 (PRD-2 흔한 함정 #1).
 # [Ref] Heiderscheit et al. 2011 MSSE (doi:10.1249/MSS.0b013e3181ebedf4) —
-#       IC knee flexion 변동성 및 stiff knee 가 shock absorption 부족과 연결됨을
-#       정량. 우리 측정 (180° = straight leg) 기준 정상 IC flexion ~20° → 160° 가
-#       임상 통념의 stiff/normal 경계. 정확한 단일 정량 임계의 1차 출처는 부재
-#       하며 본 임계는 임상 통념 + pace 4 영상 자체 검증 기반. PRD-2 §R1.
-KNEE_STIFF_THRESHOLD = 160          # 이상 → Stiff Knee 🔴
+#       n=45 healthy recreational runner 의 preferred condition IC knee flexion
+#       baseline = 17.8° ± 4.0° (논문 본문 보고값). Heiderscheit 컨벤션 (0° =
+#       straight leg) ↔ 우리 컨벤션 (180° = straight leg) 변환:
+#         knee angle 162.2° = IC flexion 17.8° = baseline mean
+#         knee angle 165°   = IC flexion 15°   = mean − 0.7 SD (stiff 임계)
+#         knee angle 140°   = IC flexion 40°   = mean + 5.6 SD (over_bent 임계)
+#       우리 stiff 임계 165° 는 baseline 평균보다 약 0.7 SD stiffer 영역 — 통계적
+#       outlier-leaning 위치. 자체 데이터: pace 530/6/7/630 200 strikes 평균
+#       knee angle 158.5° (baseline + 0.9 SD 더 굽힘 — 숙련 러너 일관 신호),
+#       max 164°, > 165° 0건, < 140° 0건. False positive 0건 검증.
+#       2026-05-25 재조정 (160→165, tol 5→3) 이전 임계는 분포 모드 [158,160)
+#       정점을 가로질러 94.5% borderline 라벨링되며 신호 가치 상실.
+#       향후 작업: Peak Flexion (mid-stance) 측정 추가 시 Souza 2016 PMR
+#       (PMC4714754) 의 "<45° flexion = stiff" 가 1차 근거 예정. 현재는 IC 만
+#       평가. PRD-2 §R1 + §[R1-future].
+KNEE_STIFF_THRESHOLD = 165          # 이상 → Stiff Knee 🔴
 KNEE_GOOD_MIN = 140                 # 정상 하한 🟢
-KNEE_GOOD_MAX = 160                 # 정상 상한 🟢
+KNEE_GOOD_MAX = 165                 # 정상 상한 🟢
 KNEE_OVERBENT_THRESHOLD = 140       # 미만 → Over Bent 🟡
-KNEE_BORDERLINE_TOLERANCE = 5       # 임계값 ±5° → borderline 🟡
+KNEE_BORDERLINE_TOLERANCE = 3       # 임계값 ±3° → borderline 🟡
 
 
 # =============================================================================
