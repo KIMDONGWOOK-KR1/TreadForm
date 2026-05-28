@@ -168,7 +168,17 @@ OVERSTRIDE_THRESHOLD = 0.15         # 초과 → over_stride 🔴, 이하 → go
 #       (Cavanagh & Williams 1982 MSSE PMID:7070254). 신장 1.7m + PRD-8 촬영
 #       가이드(인체 화면 60~80% 점유) 기준 정규화 0.06 ≈ 10cm (healthy upper
 #       bound). 2026-05-17 보수적 임계 0.08 → 0.06 으로 학술 통념에 정렬. PRD-2 §R4.
-VERTICAL_OSC_HIGH_THRESHOLD = 0.06  # 초과 → high_oscillation 🔴
+VERTICAL_OSC_HIGH_THRESHOLD = 0.06  # 초과 → high_oscillation 🔴 (fallback: 신장 미입력 시)
+
+# === cm-aware 모드 (Phase 1, 2026-05-28) ===
+# 신장(height_cm) + 프레임 내 신체 정규화 길이(nose~ankle median) 환산으로
+# 정규화 임계의 프레이밍 의존성을 제거하고 절대 cm 단위 임계를 적용한다.
+#     scale_cm_per_norm = height_cm / body_norm_length
+#     vo_cm = vo_norm * scale_cm_per_norm
+# height_cm 미입력 또는 body_norm_length 추정 실패 시 VERTICAL_OSC_HIGH_THRESHOLD
+# 정규화 임계로 fallback (frame 60~80% 점유 가정 유지).
+# [Ref] Cavanagh & Williams 1982 MSSE PMID:7070254 — running economy 최적 VO 6~10cm.
+VO_HIGH_THRESHOLD_CM = 10.0
 
 
 # =============================================================================
