@@ -55,13 +55,34 @@ VERTICAL_MESSAGES: dict[str, str] = {
         "상하 움직임이 크게 발생합니다. 에너지 낭비가 발생할 수 있으니 "
         "낮고 부드럽게 굴러가듯 달리는 느낌으로 조정해보세요."
     ),
+    "high_cm": (
+        "수직 진폭이 {value_cm:.1f}cm로 권장 상한({threshold_cm:.0f}cm)을 넘습니다. "
+        "에너지 낭비가 발생할 수 있으니 낮고 부드럽게 굴러가듯 달리는 느낌으로 조정해보세요."
+    ),
     "good": "수직 진폭이 효율적입니다 👍",
+    "good_cm": "수직 진폭이 {value_cm:.1f}cm로 효율적인 범위에 있습니다 👍",
 }
 
 ASYMMETRY_MESSAGES: dict[str, str] = {
     "warning": (
         "좌우 비대칭({ratio:.0%})이 감지됩니다. "
         "편측 부상 가능성이 있어 약한 쪽 근력 강화를 권장드립니다."
+    ),
+}
+
+# Phase 3 (2026-05-28): pace-aware cadence trailing info. 우선순위 issue 와
+# 별개로 항상 메시지 끝에 1문장 첨부 (pace 입력 있을 때만).
+CADENCE_MESSAGES: dict[str, str] = {
+    "optimal": (
+        "케이던스 {actual}spm 는 입력 페이스 기준 적정 범위({lo}-{hi})입니다 👍"
+    ),
+    "low": (
+        "케이던스 {actual}spm 는 입력 페이스 기준 적정 범위({lo}-{hi})보다 "
+        "{dev:.1f}% 낮습니다. 보폭을 약간 줄이고 빠른 회전으로 조정해보세요."
+    ),
+    "high": (
+        "케이던스 {actual}spm 는 입력 페이스 기준 적정 범위({lo}-{hi})보다 "
+        "{dev:.1f}% 높습니다. 보폭을 약간 늘려 호흡과 회전수를 균형 잡아보세요."
     ),
 }
 
@@ -174,6 +195,13 @@ def _render_issue(key: str, result: AnalysisResult) -> str:
             count=over_counts.get("over", 0)
         )
     if key == "vertical":
+        vo = result.metrics.get("vertical_oscillation", {})
+        value_cm = vo.get("avg_value_cm")
+        threshold_cm = vo.get("threshold_cm")
+        if value_cm is not None and threshold_cm is not None:
+            return VERTICAL_MESSAGES["high_cm"].format(
+                value_cm=value_cm, threshold_cm=threshold_cm,
+            )
         return VERTICAL_MESSAGES["high"]
     return ""
 
@@ -195,9 +223,31 @@ def _all_good_message(result: AnalysisResult) -> str:
     if over_status.get("good", 0) > 0 and over_status.get("over", 0) == 0:
         parts.append(OVERSTRIDE_MESSAGES["good"])
     if vert_status == "good":
-        parts.append(VERTICAL_MESSAGES["good"])
+        vo = result.metrics.get("vertical_oscillation", {})
+        value_cm = vo.get("avg_value_cm")
+        if value_cm is not None:
+            parts.append(VERTICAL_MESSAGES["good_cm"].format(value_cm=value_cm))
+        else:
+            parts.append(VERTICAL_MESSAGES["good"])
 
     return " ".join(parts)
+
+
+def _cadence_trailing(result: AnalysisResult) -> str:
+    """pace 입력 있을 때 cadence info 1문장. pace 미입력 시 빈 문자열."""
+    s = result.summary or {}
+    if "expected_cadence_min" not in s or "cadence_hint" not in s:
+        return ""
+    hint = s["cadence_hint"]
+    template = CADENCE_MESSAGES.get(hint)
+    if template is None:
+        return ""
+    return template.format(
+        actual=int(round(s.get("cadence_spm", 0))),
+        lo=int(s["expected_cadence_min"]),
+        hi=int(s["expected_cadence_max"]),
+        dev=float(s.get("cadence_deviation_pct", 0.0)),
+    )
 
 
 def generate_korean_coach_message(result: AnalysisResult, max_issues: int = 3) -> str:
@@ -210,21 +260,30 @@ def generate_korean_coach_message(result: AnalysisResult, max_issues: int = 3) -
 
     Returns:
         한국어 메시지 문자열. low confidence 면 머리말에 재촬영 권장 prefix.
+        pace 입력이 있으면 끝에 cadence info 1문장 trailing append.
     """
     prefix = ""
     if result.confidence == "low":
         prefix = LOW_CONFIDENCE_PREFIX
 
+    cadence_tail = _cadence_trailing(result)
+
     issues = select_priority_issues(result)[:max_issues]
     if not issues:
-        msg = prefix + _all_good_message(result)
-        logger.info("coach message generated (all good): %d chars", len(msg))
-        return msg
+        body = _all_good_message(result)
+    else:
+        summary_intro = f"오늘 러닝에서 점검할 부분 {len(issues)}가지를 확인했습니다."
+        sentences = [summary_intro] + [_render_issue(k, result) for k in issues]
+        body = " ".join(s for s in sentences if s)
 
-    summary_intro = f"오늘 러닝에서 점검할 부분 {len(issues)}가지를 확인했습니다."
-    sentences = [summary_intro] + [_render_issue(k, result) for k in issues]
-    msg = prefix + " ".join(s for s in sentences if s)
-    logger.info("coach message generated: issues=%s, %d chars", issues, len(msg))
+    parts = [prefix + body]
+    if cadence_tail:
+        parts.append(cadence_tail)
+    msg = " ".join(parts)
+    logger.info(
+        "coach message generated: issues=%s, cadence_tail=%s, %d chars",
+        issues, bool(cadence_tail), len(msg),
+    )
     return msg
 
 
@@ -234,6 +293,7 @@ __all__ = [
     "OVERSTRIDE_MESSAGES",
     "VERTICAL_MESSAGES",
     "ASYMMETRY_MESSAGES",
+    "CADENCE_MESSAGES",
     "select_priority_issues",
     "generate_korean_coach_message",
 ]

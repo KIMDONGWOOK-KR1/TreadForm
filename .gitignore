@@ -15,3 +15,7 @@ server/uploads/
 server/analysis_result.json
 *.log
 out/
+
+# 분석 진단 산출물 (재실행 가능, .py 만 추적)
+server/scripts/*.json
+server/scripts/*.png

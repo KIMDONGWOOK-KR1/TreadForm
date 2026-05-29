@@ -69,8 +69,30 @@ LR_SWAP_RATIO = 0.4          # swap_cost / normal_cost 가 이 값 이하여야.
 # 3. Foot Strike (착지) 판별
 # =============================================================================
 # 동일 발 착지 중복 판정 방지를 위한 최소 프레임 간격.
-# 30fps 기준 약 0.33초 → 사람이 1초에 3보 이상 같은 발로 디딜 수 없으므로 충분.
-FOOT_STRIKE_COOLDOWN_FRAMES = 10
+#
+# 60fps 기준 20 프레임 = 0.333초. 정상 stride cycle (180 spm 양발 합산
+# baseline → 한 발 cycle 60/(180/2) ≈ 0.667초) 의 절반.
+#
+# [실측 보정 2026-05-29] 기존 10프레임 (0.167s) 은 한 stance phase 안의
+# pose 노이즈/발목 미세 oscillation 에 의한 double peak 를 막지 못해
+# 측정 cadence 가 +10~28% over-count 됐다. 4영상 (pace530/6/630/7) ground
+# truth 카운트 (25/67/45/33) 대비 cd=20~40 plateau 에서 정확 매치 (pace630
+# 만 +3 잔여, prominence 임계 별도 검토). cd=20 은 plateau 의 보수적 경계
+# 로 정상 strike 손실 위험 0, 실측에서 검증된 안전 마진.
+#
+# [Ref] Cavanagh & Kram 1989 MSSE 21(4):467-479 — 정상 stride cycle 시간.
+#       Daniels 2021 — 180 spm baseline.
+FOOT_STRIKE_COOLDOWN_FRAMES = 20
+
+# 정규화 좌표상 peak prominence 의 최소 임계.
+# [실측 보정 2026-05-29] pose extraction boundary (NaN sentinel 마스킹 영역
+# 직후) 의 spurious peak (prom 0.0001 ~ 0.0007) 가 정상 strike (prom 0.04 ~
+# 0.09, median ≈ 0.07) 와 100배 차이로 분리된다. 4영상 sweep 결과
+# 0.001 이 spurious 만 거르고 정상 strike 손실 0 인 보수적 임계 (4영상
+# 총 절대오차 5→3 로 감소: pace530 0/pace6 0/pace630 +2/pace7 -1).
+# 0.001 = 정규화 좌표 화면 높이의 0.1% = 1080p 에서 약 1.1픽셀 (pose
+# estimation noise floor 수준의 미세 변위).
+FOOT_STRIKE_MIN_PROMINENCE = 0.001
 
 
 # =============================================================================
@@ -253,3 +275,39 @@ WARN_CAMERA_SHAKE_PIXELS = 3.0
 # === 신뢰도 등급 (경고 개수 기반) ===
 CONFIDENCE_HIGH_MAX_WARNINGS = 0       # 0개 → high
 CONFIDENCE_MEDIUM_MAX_WARNINGS = 2     # 1~2개 → medium, 3개+ → low
+
+
+# =============================================================================
+# 12. Cadence pace-aware 보정 (Phase 0, 2026-05-28)
+# =============================================================================
+# 사용자 입력 pace (sec/km) + height (cm) 로 개인별 기대 cadence 범위 산출.
+# 단일 "180 spm" cutoff 는 (a) pace 가 빠를수록 cadence 자연 상승, (b) 키 큰
+# 사람은 stride 길어 같은 pace 에 더 낮은 cadence 가 정상 — 두 효과 무시.
+#
+# 밴드는 신장 170cm 기준 명목 범위 (lo, hi). 신장 보정:
+#   shift_spm = -(height_cm - 170) * CADENCE_HEIGHT_SHIFT_SPM_PER_CM
+# (키 ↑ → expected ↓; 키 ↓ → expected ↑)
+#
+# Pace 미입력 시 expected_range = None → coach trailing 생략, summary 의
+# cadence_spm 만 정보성으로 노출 (기존 동작 유지).
+#
+# [Ref] Daniels' Running Formula 4ed (Human Kinetics 2021) — 180 spm 엘리트
+#       표준 + pace 별 자연 증가. Hunter et al. 2017 J Sports Sci 35(15):1488-1495
+#       (DOI:10.1080/02640414.2016.1228562) — pace 와 cadence 의 양의 회귀.
+#       Schubert et al. 2014 Sports Health (PRD-2 §R3) — stride freq 와 mechanics.
+#       Cavanagh & Kram 1989 MSSE 21(4):467-479 — 개인별 economy 최적 stride freq.
+#       Winter 1990 — leg length ≈ height × 0.485.
+CADENCE_BANDS_170CM: tuple[tuple[float, float, int, int], ...] = (
+    # (pace_min_sec_per_km inclusive, pace_max_sec_per_km exclusive, spm_lo, spm_hi)
+    (390.0, float("inf"), 162, 175),   # >= 6:30/km — 조깅
+    (330.0, 390.0,        168, 180),   # 5:30 ~ 6:30
+    (270.0, 330.0,        175, 188),   # 4:30 ~ 5:30
+    (0.0,   270.0,        182, 196),   # < 4:30 — tempo/race
+)
+CADENCE_HEIGHT_SHIFT_SPM_PER_CM = 0.5  # +1cm 신장 → -0.5 spm 기대치
+
+# 측정 cadence 가 expected_range 밖 → hint 분류. deviation_pct 는 가장 가까운
+# 경계 대비 백분율 (low/high), optimal 이면 0.
+CADENCE_HINT_OPTIMAL = "optimal"
+CADENCE_HINT_LOW = "low"
+CADENCE_HINT_HIGH = "high"
