@@ -389,8 +389,13 @@ def render_skeleton_video(
     w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
 
-    fourcc = cv2.VideoWriter_fourcc(*"mp4v")
-    writer = cv2.VideoWriter(str(out), fourcc, fps, (w, h))
+    # 브라우저 <video> 재생을 위해 H.264(avc1) 로 인코딩한다.
+    # mp4v(MPEG-4 Part 2)는 HTML5 video 가 디코딩하지 못해 검은 화면이 된다.
+    # OpenCV 빌드에 avc1 인코더가 없으면 mp4v 로 폴백한다 (브라우저 비호환이지만 파일은 생성).
+    writer = cv2.VideoWriter(str(out), cv2.VideoWriter_fourcc(*"avc1"), fps, (w, h))
+    if not writer.isOpened():
+        logger.warning("avc1(H.264) writer open 실패 → mp4v 폴백 (브라우저 재생 불가 가능): %s", out)
+        writer = cv2.VideoWriter(str(out), cv2.VideoWriter_fourcc(*"mp4v"), fps, (w, h))
     if not writer.isOpened():
         cap.release()
         raise RuntimeError(f"cv2 VideoWriter open failed: {out}")

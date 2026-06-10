@@ -16,6 +16,20 @@ server/analysis_result.json
 *.log
 out/
 
+# MediaPipe 모델 캐시 (최초 실행 시 자동 다운로드)
+server/.models/
+
+# 테스트 / 빌드 캐시
+.pytest_cache/
+.coverage
+*.egg-info/
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
 # 분석 진단 산출물 (재실행 가능, .py 만 추적)
 server/scripts/*.json
 server/scripts/*.png
