@@ -25,7 +25,8 @@ def _build_result(
     fs_counts: dict | None = None,
     over_counts: dict | None = None,
     vertical_status: str = "good",
-    asymmetry: dict | None = None,
+    vertical_avg_value_cm: float | None = None,
+    vertical_threshold_cm: float | None = None,
     confidence: str = "high",
     knee_per_strike: list | None = None,
     fs_per_strike: list | None = None,
@@ -69,14 +70,9 @@ def _build_result(
                 "right_avg": 0.05,
                 "status": vertical_status,
                 "per_stride": vert_per_stride or [],
+                "avg_value_cm": vertical_avg_value_cm,
+                "threshold_cm": vertical_threshold_cm,
             },
-        },
-        asymmetry=asymmetry
-        or {
-            "strike_count_ratio": 0.0,
-            "knee_angle_ratio": 0.0,
-            "oscillation_ratio": 0.0,
-            "is_warning": False,
         },
         confidence=confidence,
     )
@@ -87,19 +83,13 @@ def _build_result(
 # ---------------------------------------------------------------------------
 
 
-def test_priority_asymmetry_first():
-    r = _build_result(
-        asymmetry={
-            "strike_count_ratio": 0.3,
-            "knee_angle_ratio": 0.1,
-            "oscillation_ratio": 0.0,
-            "is_warning": True,
-        },
-        fs_counts={"heel": 8, "midfoot": 2, "forefoot": 0},
-    )
+def test_priority_excludes_asymmetry():
+    # 좌·우 비대칭은 제품에서 제거됨 — 우선순위에 절대 등장하지 않고
+    # 실측 이슈(heel)만 잡혀야 한다 (2026-06-02).
+    r = _build_result(fs_counts={"heel": 8, "midfoot": 2, "forefoot": 0})
     issues = select_priority_issues(r)
-    assert issues[0] == "asymmetry"
-    assert "foot_strike_heel" in issues
+    assert "asymmetry" not in issues
+    assert issues[0] == "foot_strike_heel"
 
 
 def test_priority_heel_strike_threshold():
@@ -134,18 +124,12 @@ def test_message_all_good_includes_positive_token():
     assert "오늘 러닝" in msg
 
 
-def test_message_asymmetry_warning_appears():
-    r = _build_result(
-        asymmetry={
-            "strike_count_ratio": 0.2,
-            "knee_angle_ratio": 0.05,
-            "oscillation_ratio": 0.0,
-            "is_warning": True,
-        }
-    )
+def test_message_excludes_asymmetry():
+    # 코칭 메시지에는 좌·우 비대칭 문구가 절대 포함되지 않아야 한다 (2026-06-02 제거).
+    r = _build_result()
     msg = generate_korean_coach_message(r)
-    assert "비대칭" in msg
-    assert "20%" in msg  # max ratio 가 0.2 → 20%
+    assert "비대칭" not in msg
+    assert "안정적" in msg or "👍" in msg
 
 
 def test_message_low_confidence_prefix():
@@ -173,6 +157,39 @@ def test_message_vertical_high():
     r = _build_result(vertical_status="high")
     msg = generate_korean_coach_message(r)
     assert "상하" in msg or "수직" in msg or "낮고" in msg
+    # fallback 모드 (cm 메타 없음) 에서는 cm 수치/단위가 메시지에 나오지 않음.
+    assert "cm" not in msg
+
+
+def test_message_vertical_high_cm_aware_includes_value():
+    """cm-aware 모드면 측정값과 임계가 메시지에 명시되어야 한다."""
+    r = _build_result(
+        vertical_status="high",
+        vertical_avg_value_cm=12.3,
+        vertical_threshold_cm=10.0,
+    )
+    msg = generate_korean_coach_message(r)
+    assert "12.3cm" in msg
+    assert "10cm" in msg
+
+
+def test_message_vertical_good_cm_aware_includes_value():
+    """all-good 경로에서도 cm-aware 면 cm 수치 노출."""
+    r = _build_result(
+        vertical_status="good",
+        vertical_avg_value_cm=8.4,
+        vertical_threshold_cm=10.0,
+    )
+    msg = generate_korean_coach_message(r)
+    assert "8.4cm" in msg
+
+
+def test_message_vertical_good_fallback_no_cm():
+    """fallback 모드(cm 없음) all-good 메시지엔 cm 표기 없음."""
+    r = _build_result(vertical_status="good")
+    msg = generate_korean_coach_message(r)
+    assert "수직 진폭이 효율적입니다" in msg
+    assert "cm" not in msg
 
 
 def test_message_max_issues_truncation():
@@ -182,12 +199,6 @@ def test_message_max_issues_truncation():
         fs_counts={"heel": 8, "midfoot": 2, "forefoot": 0},
         over_counts={"good": 5, "over": 5},
         vertical_status="high",
-        asymmetry={
-            "strike_count_ratio": 0.3,
-            "knee_angle_ratio": 0.0,
-            "oscillation_ratio": 0.0,
-            "is_warning": True,
-        },
     )
     msg = generate_korean_coach_message(r, max_issues=2)
     assert "2가지" in msg

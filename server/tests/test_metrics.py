@@ -11,10 +11,6 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from analyzer.metrics.asymmetry import (
-    analyze_asymmetry,
-    calculate_asymmetry_ratio,
-)
 from analyzer.metrics.foot_strike import (
     analyze_foot_strike,
     calculate_foot_strike_angle,
@@ -35,14 +31,14 @@ from analyzer.metrics.vertical_osc import (
     calculate_oscillation_per_stride,
     classify_oscillation,
 )
+from analyzer.body_scale import compute_body_norm_length
 from config import (
-    ASYMMETRY_FOOT_VIS_DIFF_THRESHOLD,
-    ASYMMETRY_WARNING_THRESHOLD,
     HEEL_STRIKE_THRESHOLD,
     KNEE_BORDERLINE_TOLERANCE,
     KNEE_STIFF_THRESHOLD,
     OVERSTRIDE_THRESHOLD,
     VERTICAL_OSC_HIGH_THRESHOLD,
+    VO_HIGH_THRESHOLD_CM,
 )
 
 
@@ -287,89 +283,166 @@ class TestVerticalOscillation:
         result = analyze_vertical_oscillation(df, synthetic_strikes)
         assert result["status"] == "high"
         assert result["avg_value"] > VERTICAL_OSC_HIGH_THRESHOLD
+        # fallback 모드: cm 필드는 None.
+        assert result["avg_value_cm"] is None
+        assert result["threshold_cm"] is None
+        assert result["scale_cm_per_norm"] is None
 
 
 # ---------------------------------------------------------------------------
-# Asymmetry
+# Vertical Oscillation — cm-aware 모드 (Phase 1)
 # ---------------------------------------------------------------------------
-class TestAsymmetry:
-    def test_ratio_basic(self):
-        # L=100, R=120 → |20|/120 ≈ 0.1667
-        assert calculate_asymmetry_ratio(100, 120) == pytest.approx(20 / 120)
+class TestVerticalOscillationCmAware:
+    def _make_df(self, hip_amplitude_norm: float, n: int = 100) -> pd.DataFrame:
+        """진폭 hip_amplitude_norm 의 sin hip_y + nose/ankle landmark 포함 df."""
+        rows = [_empty_frame_row(i) for i in range(n)]
+        for i, row in enumerate(rows):
+            v = 0.5 + (hip_amplitude_norm / 2.0) * math.sin(2 * math.pi * i / 30.0)
+            row["left_hip_y"] = v
+            row["right_hip_y"] = v
+            # body_norm_length = 0.5 가 되도록 nose=0.2, ankle=0.7.
+            row["nose_x"] = 0.5
+            row["nose_y"] = 0.2
+            row["nose_z"] = 0.0
+            row["nose_visibility"] = 1.0
+            row["left_ankle_y"] = 0.7
+            row["right_ankle_y"] = 0.7
+        return pd.DataFrame(rows)
 
-    def test_ratio_nan_when_both_zero(self):
-        assert math.isnan(calculate_asymmetry_ratio(0.0, 0.0))
-
-    def test_ratio_nan_propagates(self):
-        assert math.isnan(calculate_asymmetry_ratio(float("nan"), 1.0))
-
-    def test_strike_count_alone_does_not_warn(self):
-        # 큰 strike 비대칭(50%)이라도 knee/osc 정상이면 워닝 안 뜸 — 트리거 격하 정책.
-        # pace7/630 false positive 해결 케이스.
-        strikes = {"left": np.arange(10), "right": np.arange(5)}  # ratio 50%
-        knee = {"left_avg": 150.0, "right_avg": 150.0}
-        vosc = {"left_avg": 0.04, "right_avg": 0.04}
-        result = analyze_asymmetry(strikes, knee, vosc)
-        assert result["strike_count_ratio"] == pytest.approx(0.5)
-        assert result["is_warning"] is False
-
-    def test_knee_asymmetry_triggers_warning(self):
-        strikes = {"left": np.arange(20), "right": np.arange(20)}
-        knee = {"left_avg": 150.0, "right_avg": 170.0}  # ratio≈11.8%
-        vosc = {"left_avg": 0.04, "right_avg": 0.04}
-        result = analyze_asymmetry(strikes, knee, vosc)
-        assert result["is_warning"] is True
-
-    def test_oscillation_asymmetry_triggers_warning(self):
-        strikes = {"left": np.arange(20), "right": np.arange(20)}
-        knee = {"left_avg": 150.0, "right_avg": 150.0}
-        vosc = {"left_avg": 0.04, "right_avg": 0.05}  # ratio = 20%
-        result = analyze_asymmetry(strikes, knee, vosc)
-        assert result["is_warning"] is True
-
-    def test_all_symmetric_no_warn(self):
-        strikes = {"left": np.arange(10), "right": np.arange(10)}
-        knee = {"left_avg": 150.0, "right_avg": 152.0}
-        vosc = {"left_avg": 0.04, "right_avg": 0.041}
-        result = analyze_asymmetry(strikes, knee, vosc)
-        assert result["is_warning"] is False
-        assert ASYMMETRY_WARNING_THRESHOLD == 0.1
-
-    def test_visibility_diff_invalidates_strike_ratio(self):
-        # 좌/우 발 visibility 차이가 임계 초과면 strike_count_ratio → NaN.
-        strikes = {"left": np.arange(10), "right": np.arange(5)}
-        knee = {"left_avg": 150.0, "right_avg": 150.0}
-        vosc = {"left_avg": 0.04, "right_avg": 0.04}
-        result = analyze_asymmetry(
-            strikes, knee, vosc,
-            foot_visibility={"left": 0.85, "right": 0.70},  # diff=0.15 > 0.10
+    def test_cm_mode_above_10cm_is_high(self, synthetic_strikes):
+        # height=170cm, body_norm_length=0.5 → scale=340 cm/norm.
+        # 진폭 0.04 norm → 13.6cm > 10cm → high.
+        df = self._make_df(hip_amplitude_norm=0.04)
+        result = analyze_vertical_oscillation(
+            df, synthetic_strikes, height_cm=170.0, body_norm_length=0.5
         )
-        assert math.isnan(result["strike_count_ratio"])
-        # 트리거에는 영향 없음 (이미 strike 단독 트리거 비활성).
-        assert result["is_warning"] is False
+        assert result["status"] == "high"
+        assert result["threshold_cm"] == pytest.approx(VO_HIGH_THRESHOLD_CM)
+        assert result["scale_cm_per_norm"] == pytest.approx(340.0)
+        assert result["avg_value_cm"] > VO_HIGH_THRESHOLD_CM
 
-    def test_visibility_balanced_keeps_strike_ratio(self):
-        # 좌/우 visibility 차이 작으면 strike_count_ratio 보존.
-        strikes = {"left": np.arange(10), "right": np.arange(5)}
-        knee = {"left_avg": 150.0, "right_avg": 150.0}
-        vosc = {"left_avg": 0.04, "right_avg": 0.04}
-        result = analyze_asymmetry(
-            strikes, knee, vosc,
-            foot_visibility={"left": 0.85, "right": 0.82},  # diff=0.03
+    def test_cm_mode_below_10cm_is_good(self, synthetic_strikes):
+        # 진폭 0.02 norm × 340 = 6.8cm < 10cm → good.
+        # 단, 정규화 fallback 기준(0.06)으로는 비교하지 않음 — cm 임계가 우선.
+        df = self._make_df(hip_amplitude_norm=0.02)
+        result = analyze_vertical_oscillation(
+            df, synthetic_strikes, height_cm=170.0, body_norm_length=0.5
         )
-        assert result["strike_count_ratio"] == pytest.approx(0.5)
+        assert result["status"] == "good"
+        assert result["avg_value_cm"] < VO_HIGH_THRESHOLD_CM
 
-    def test_visibility_none_keeps_strike_ratio(self):
-        # 하위 호환: foot_visibility 안 넘기면 strike_ratio 그대로.
-        strikes = {"left": np.arange(10), "right": np.arange(5)}
-        knee = {"left_avg": 150.0, "right_avg": 150.0}
-        vosc = {"left_avg": 0.04, "right_avg": 0.04}
-        result = analyze_asymmetry(strikes, knee, vosc)
-        assert result["strike_count_ratio"] == pytest.approx(0.5)
+    def test_cm_mode_taller_runner_more_lenient(self, synthetic_strikes):
+        # 같은 정규화 진폭도 신장 차이로 cm 환산이 달라져야 한다.
+        # 진폭 0.03 norm:
+        #   170cm → 10.2cm (high)
+        #   190cm × body_norm_length=0.5 → scale 380 → 11.4cm (high)
+        # 신장 입력의 효과를 확인하려면 동일 frame body length 가정에서 cm 값 비교.
+        df = self._make_df(hip_amplitude_norm=0.03)
+        r_short = analyze_vertical_oscillation(
+            df, synthetic_strikes, height_cm=160.0, body_norm_length=0.5
+        )
+        r_tall = analyze_vertical_oscillation(
+            df, synthetic_strikes, height_cm=190.0, body_norm_length=0.5
+        )
+        # 같은 norm 진폭에서 키 큰 사람의 cm 값이 더 크다.
+        assert r_tall["avg_value_cm"] > r_short["avg_value_cm"]
+        # height_cm 가 메타데이터에 보존된다.
+        assert r_short["height_cm"] == pytest.approx(160.0)
+        assert r_tall["height_cm"] == pytest.approx(190.0)
 
-    def test_foot_vis_threshold_constant_pinned(self):
-        # 설계 가정 (0.10) 이 변경되면 위 케이스 임계가 흔들리므로 핀.
-        assert ASYMMETRY_FOOT_VIS_DIFF_THRESHOLD == 0.10
+    def test_per_stride_carries_value_cm(self, synthetic_strikes):
+        df = self._make_df(hip_amplitude_norm=0.04)
+        result = analyze_vertical_oscillation(
+            df, synthetic_strikes, height_cm=170.0, body_norm_length=0.5
+        )
+        assert len(result["per_stride"]) > 0
+        for s in result["per_stride"]:
+            assert s["value_cm"] is not None
+            assert s["value_cm"] == pytest.approx(s["value"] * 340.0)
+
+    def test_fallback_when_height_none(self, synthetic_strikes):
+        df = self._make_df(hip_amplitude_norm=0.04)
+        result = analyze_vertical_oscillation(
+            df, synthetic_strikes, height_cm=None, body_norm_length=0.5
+        )
+        assert result["avg_value_cm"] is None
+        assert result["threshold_cm"] is None
+        # 0.04 > 0.06 (norm fallback) 이 아니므로 good.
+        assert result["status"] == "good"
+
+    def test_fallback_when_body_norm_length_nan(self, synthetic_strikes):
+        # body_norm_length 추정 실패 시 fallback. height 만 있어도 cm 변환 불가.
+        df = self._make_df(hip_amplitude_norm=0.07)
+        result = analyze_vertical_oscillation(
+            df, synthetic_strikes, height_cm=170.0, body_norm_length=float("nan")
+        )
+        assert result["avg_value_cm"] is None
+        # 0.07 > 0.06 → fallback 정규화 임계에서는 high.
+        assert result["status"] == "high"
+
+    def test_fallback_when_body_norm_length_zero(self, synthetic_strikes):
+        df = self._make_df(hip_amplitude_norm=0.02)
+        result = analyze_vertical_oscillation(
+            df, synthetic_strikes, height_cm=170.0, body_norm_length=0.0
+        )
+        # 0 length 도 fallback 처리.
+        assert result["scale_cm_per_norm"] is None
+
+
+# ---------------------------------------------------------------------------
+# Body Scale 추정
+# ---------------------------------------------------------------------------
+class TestBodyNormLength:
+    def test_basic_median(self):
+        # nose y=0.1, ankle y=0.9 → length 0.8 across all frames.
+        rows = []
+        for i in range(50):
+            row = _empty_frame_row(i)
+            row["nose_x"] = 0.5
+            row["nose_y"] = 0.1
+            row["nose_z"] = 0.0
+            row["nose_visibility"] = 1.0
+            row["left_ankle_y"] = 0.9
+            row["right_ankle_y"] = 0.9
+            rows.append(row)
+        df = pd.DataFrame(rows)
+        assert compute_body_norm_length(df) == pytest.approx(0.8)
+
+    def test_uses_lower_ankle_robust_to_one_side_nan(self):
+        # 한쪽 ankle 이 NaN 이어도 다른쪽으로 통과 (fmax).
+        rows = []
+        for i in range(20):
+            row = _empty_frame_row(i)
+            row["nose_x"] = 0.5
+            row["nose_y"] = 0.1
+            row["nose_z"] = 0.0
+            row["nose_visibility"] = 1.0
+            row["left_ankle_y"] = float("nan")
+            row["right_ankle_y"] = 0.85
+            rows.append(row)
+        df = pd.DataFrame(rows)
+        assert compute_body_norm_length(df) == pytest.approx(0.75)
+
+    def test_returns_nan_when_no_valid_frame(self):
+        rows = []
+        for i in range(10):
+            row = _empty_frame_row(i)
+            row["nose_x"] = 0.5
+            row["nose_y"] = float("nan")
+            row["nose_z"] = 0.0
+            row["nose_visibility"] = 0.0
+            row["left_ankle_y"] = float("nan")
+            row["right_ankle_y"] = float("nan")
+            rows.append(row)
+        df = pd.DataFrame(rows)
+        assert math.isnan(compute_body_norm_length(df))
+
+    def test_missing_columns_returns_nan(self):
+        # nose 컬럼 자체가 없는 df 도 NaN 반환 (deprecated/legacy 케이스).
+        rows = [_empty_frame_row(i) for i in range(5)]
+        df = pd.DataFrame(rows)
+        assert "nose_y" not in df.columns
+        assert math.isnan(compute_body_norm_length(df))
 
 
 # ---------------------------------------------------------------------------
@@ -387,7 +460,6 @@ class TestAnalysisResultModel:
         vosc = analyze_vertical_oscillation(
             synthetic_running_df, synthetic_strikes
         )
-        asym = analyze_asymmetry(synthetic_strikes, knee, vosc)
 
         result = AnalysisResult(
             analysis_id="test-001",
@@ -398,7 +470,6 @@ class TestAnalysisResultModel:
                 "overstriding": over,
                 "vertical_oscillation": vosc,
             },
-            asymmetry=asym,
             danger_timestamps=[DangerTimestamp(time_sec=1.23, type="heel_strike")],
         )
         payload = result.model_dump_json()
